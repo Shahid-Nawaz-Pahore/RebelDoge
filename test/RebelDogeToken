@@ -1,0 +1,93 @@
+const { expect } = require("chai");
+const { ethers } = require("hardhat"); 
+describe("RebelDogeToken", function () {
+    let RebelDogeToken, rebelDogeToken, owner, addr1;
+
+    before(async function () {
+        RebelDogeToken = await ethers.getContractFactory("RebelDogeToken");
+        [owner, addr1] = await ethers.getSigners();
+        rebelDogeToken = await RebelDogeToken.deploy(1000000); // Deploy with an initial supply
+    });
+
+    it("Should deploy with correct initial supply", async function () {
+        const totalSupply = await rebelDogeToken.totalSupply();
+        expect(totalSupply).to.equal(ethers.utils.parseEther("1000000"));
+    });
+
+    it("Should allow the owner to mint tokens", async function () {
+        await rebelDogeToken.mint(addr1.address, ethers.utils.parseEther("100"));
+        const balance = await rebelDogeToken.balanceOf(addr1.address);
+        expect(balance).to.equal(ethers.utils.parseEther("100"));
+    });
+
+    it("Should not allow non-owners to mint tokens", async function () {
+        await expect(rebelDogeToken.connect(addr1).mint(addr1.address, ethers.utils.parseEther("100")))
+            .to.be.revertedWith("Ownable: caller is not the owner");
+    });
+});
+
+describe("TestnetERC20", function () {
+    let TestnetERC20, testnetERC20, owner, addr1;
+
+    before(async function () {
+        TestnetERC20 = await ethers.getContractFactory("TestnetERC20");
+        [owner, addr1] = await ethers.getSigners();
+        testnetERC20 = await TestnetERC20.deploy("Test Token", "TTK", 18, owner.address);
+    });
+
+    it("Should deploy with correct parameters", async function () {
+        expect(await testnetERC20.name()).to.equal("Test Token");
+        expect(await testnetERC20.symbol()).to.equal("TTK");
+        expect(await testnetERC20.decimals()).to.equal(18);
+    });
+
+    it("Should allow the owner to mint tokens", async function () {
+        await testnetERC20.mint(owner.address, ethers.utils.parseEther("100"));
+        const balance = await testnetERC20.balanceOf(owner.address);
+        expect(balance).to.equal(ethers.utils.parseEther("100"));
+    });
+
+    it("Should allow permit function to set allowance", async function () {
+        const nonce = await testnetERC20.nonces(owner.address);
+        const deadline = Math.floor(Date.now() / 1000) + 60 * 20; // 20 minutes from now
+
+        const { v, r, s } = await owner._signTypedData(
+            {
+                name: await testnetERC20.name(),
+                version: "1",
+                chainId: (await ethers.provider.getNetwork()).chainId,
+                verifyingContract: testnetERC20.address,
+            },
+            {
+                Permit: [
+                    { name: "owner", type: "address" },
+                    { name: "spender", type: "address" },
+                    { name: "value", type: "uint256" },
+                    { name: "nonce", type: "uint256" },
+                    { name: "deadline", type: "uint256" },
+                ],
+            },
+            {
+                owner: owner.address,
+                spender: addr1.address,
+                value: ethers.utils.parseEther("10"),
+                nonce: nonce,
+                deadline: deadline,
+            }
+        );
+
+        await testnetERC20.permit(
+            owner.address,
+            addr1.address,
+            ethers.utils.parseEther("10"),
+            deadline,
+            v,
+            r,
+            s
+        );
+
+        expect(await testnetERC20.allowance(owner.address, addr1.address)).to.equal(
+            ethers.utils.parseEther("10")
+        );
+    });
+});
